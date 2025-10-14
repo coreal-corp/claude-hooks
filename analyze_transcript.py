@@ -182,15 +182,25 @@ try:
 
     # 출력 - 신규 항목만
     if new_todos:
-        print("TODOS_START")
-        for todo in new_todos[-5:]:
-            icon = "✅" if todo['status'] == 'completed' else "🔄" if todo['status'] == 'in_progress' else "⏳"
-            print(f"{icon} {todo['content']}")
-        print("TODOS_END")
+        # 완료된 항목만 필터링
+        completed_todos = [t for t in new_todos if t['status'] == 'completed']
+
+        if completed_todos:
+            print("TODOS_START")
+            for idx, todo in enumerate(completed_todos, 1):
+                print(f"{idx}. ✅ {todo['content']}")
+            print("TODOS_END")
+        else:
+            # 완료된 항목이 없으면 진행 중 또는 대기 중 항목 표시
+            print("TODOS_START")
+            for todo in new_todos[-5:]:
+                icon = "✅" if todo['status'] == 'completed' else "🔄" if todo['status'] == 'in_progress' else "⏳"
+                print(f"{icon} {todo['content']}")
+            print("TODOS_END")
     elif work_todos:
         print("TODOS_START")
-        for work in work_todos[:5]:
-            print(f"✅ {work}")
+        for idx, work in enumerate(work_todos, 1):
+            print(f"{idx}. ✅ {work}")
         print("TODOS_END")
 
     if thinkings:
