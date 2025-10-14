@@ -221,26 +221,23 @@ def main():
     # Build message
     message_parts = [f"⏱️ *소요 시간:* {minutes}분 {seconds}초"]
 
-    if analysis.get('tools'):
-        message_parts.append(f"🔧 사용 도구: {analysis['tools']}")
-
-    if analysis.get('files'):
-        message_parts.append(f"📄 변경 파일: `{analysis['files']}`")
-
-    # Git changes
-    git_changes = get_git_changes()
-    if git_changes:
-        message_parts.append(f"📝 Git 변경: {git_changes}")
-
     # Todos
     if analysis.get('todos'):
         todos_text = '\n'.join(analysis['todos'])
-        message_parts.append(f"\n\n📋 *작업 항목:*\n{todos_text}")
+        message_parts.append(f"\n📋 *완료한 작업:*\n{todos_text}")
 
     # Thinking
     if analysis.get('thinking'):
         thinking_text = '\n'.join(analysis['thinking'])
-        message_parts.append(f"\n\n💭 *주요 Thinking:*\n{thinking_text}")
+        message_parts.append(f"\n💭 *주요 사항:*\n{thinking_text}")
+
+    # Git changes
+    git_changes = get_git_changes()
+    if git_changes:
+        message_parts.append(f"\n📝 *Git 변경:* {git_changes}")
+
+    # Project path at bottom
+    message_parts.append(f"\n📂 *프로젝트:* `{work_dir}`")
 
     full_message = '\n'.join(message_parts)
 

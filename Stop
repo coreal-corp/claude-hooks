@@ -228,9 +228,12 @@ def main():
     # Thinking
     if analysis.get('thinking'):
         thinking_text = '\n'.join(analysis['thinking'])
-        message_parts.append(f"\n\n💭 *검토 사항:*\n{thinking_text}")
+        message_parts.append(f"\n💭 *검토 사항:*\n{thinking_text}")
 
-    full_message = '\n'.join(message_parts) if message_parts else "작업이 완료되었습니다."
+    # Project path at bottom
+    message_parts.append(f"\n📂 *프로젝트:* `{work_dir}`")
+
+    full_message = '\n'.join(message_parts) if message_parts else f"작업이 완료되었습니다.\n\n📂 *프로젝트:* `{work_dir}`"
 
     log_debug("Sending to Slack")
 

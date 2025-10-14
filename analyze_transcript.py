@@ -231,12 +231,6 @@ try:
             print(f"• {clean_thinking}")
             print("THINKING_END")
 
-    # 파일 정보만 출력 (도구 요약 제거)
-    if files_modified:
-        print(f"MODIFIED:{','.join(list(files_modified)[:10])}")
-    if files_analyzed:
-        print(f"ANALYZED:{','.join(list(files_analyzed)[:10])}")
-
 except Exception as e:
     print(f"ERROR:{str(e)}", file=sys.stderr)
     sys.exit(1)

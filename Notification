@@ -107,7 +107,7 @@ def send_slack_message(token, channel, icon, title, message, work_dir, timestamp
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"📂 `{work_dir}` | 🕐 {timestamp}"
+                        "text": f"📂 프로젝트: `{work_dir}` | 🕐 {timestamp}"
                     }
                 ]
             }
