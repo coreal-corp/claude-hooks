@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""
+Notification Hook - Cross-platform version
+Sends important event notifications to Slack
+"""
+import sys
+import json
+import os
+import tempfile
+from pathlib import Path
+from datetime import datetime
+import urllib.request
+import urllib.error
+
+
+def load_env_file(env_path):
+    """Load environment variables from .env file"""
+    env_vars = {}
+    if not os.path.exists(env_path):
+        return env_vars
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                env_vars[key.strip()] = value.strip().strip('"').strip("'")
+    return env_vars
+
+
+def log_debug(message):
+    """Write debug log"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    debug_log = Path(tempfile.gettempdir()) / 'claude-hook-debug.log'
+    try:
+        with open(debug_log, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except:
+        pass
+
+
+def should_ignore_notification(data):
+    """Check if notification should be ignored"""
+    message = data.get('message', '')
+    hook_event = data.get('hook_event_name', '')
+
+    # Ignore trivial notifications
+    ignore_patterns = [
+        'needs your permission',
+        'permission to use',
+        'requires approval'
+    ]
+
+    for pattern in ignore_patterns:
+        if pattern in message.lower():
+            return True
+
+    # Only pass important events
+    important_keywords = ['plan', 'complete', 'error', 'interrupt', 'exit', 'finished']
+    is_important = any(kw in message.lower() or kw in hook_event.lower()
+                       for kw in important_keywords)
+
+    return not is_important
+
+
+def detect_notification_type(message_text):
+    """Detect notification type from message"""
+    message_lower = message_text.lower()
+
+    if 'plan' in message_lower:
+        return 'plan', '📋', 'Plan Mode'
+    elif 'complete' in message_lower or 'finish' in message_lower:
+        return 'complete', '✅', 'Task Completed'
+    elif 'error' in message_lower:
+        return 'error', '❌', 'Error Occurred'
+    elif 'interrupt' in message_lower or 'stop' in message_lower:
+        return 'interrupt', '⏸️', 'Task Interrupted'
+    else:
+        return 'notification', '📢', 'Important Event'
+
+
+def send_slack_message(token, channel, icon, title, message, work_dir, timestamp):
+    """Send message to Slack"""
+    url = "https://slack.com/api/chat.postMessage"
+
+    payload = {
+        "channel": channel,
+        "text": f"{icon} {title}",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"{icon} {title}",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": message
+                }
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"📂 `{work_dir}` | 🕐 {timestamp}"
+                    }
+                ]
+            }
+        ]
+    }
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers
+        )
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result.get('ok', False)
+    except Exception as e:
+        log_debug(f"Slack API error: {str(e)}")
+        return False
+
+
+def main():
+    ppid = os.getppid()
+    log_debug(f"Notification hook started (PPID: {ppid})")
+
+    # Read notification data from stdin
+    try:
+        notification_data = json.load(sys.stdin)
+    except:
+        log_debug("Failed to parse notification data")
+        sys.exit(0)
+
+    # Load environment variables
+    env_file = Path.home() / '.ultrathink.env'
+    env_vars = load_env_file(env_file)
+
+    # Check if notification should be ignored
+    if should_ignore_notification(notification_data):
+        log_debug("Notification ignored (trivial event)")
+        sys.exit(0)
+
+    message_text = notification_data.get('message', '')
+
+    # Get session info
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    work_dir = os.getcwd()
+
+    # Slack channel setup
+    slack_channel = env_vars.get('SLACK_CHANNEL_ID', 'C09J29WDSHK')
+    slack_channel = slack_channel.lstrip('#')
+
+    log_debug(f"Important notification: {message_text}")
+
+    # Detect notification type
+    notif_type, icon, title = detect_notification_type(message_text)
+
+    # Send to Slack
+    slack_token = env_vars.get('SLACK_BOT_TOKEN')
+    if slack_token:
+        success = send_slack_message(
+            slack_token,
+            slack_channel,
+            icon,
+            title,
+            message_text,
+            work_dir,
+            timestamp
+        )
+
+        if success:
+            log_debug(f"Slack notification sent successfully - {notif_type}")
+        else:
+            log_debug("Slack notification failed")
+
+
+if __name__ == '__main__':
+    main()

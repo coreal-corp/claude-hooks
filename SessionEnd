@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""
+SessionEnd Hook - Cross-platform version
+Sends session end summary with work details to Slack
+"""
+import sys
+import json
+import os
+import tempfile
+import subprocess
+from pathlib import Path
+from datetime import datetime
+import urllib.request
+import urllib.error
+
+
+def load_env_file(env_path):
+    """Load environment variables from .env file"""
+    env_vars = {}
+    if not os.path.exists(env_path):
+        return env_vars
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                env_vars[key.strip()] = value.strip().strip('"').strip("'")
+    return env_vars
+
+
+def analyze_transcript(transcript_path, analyzer_script):
+    """Analyze transcript using Python analyzer"""
+    if not os.path.exists(transcript_path):
+        return {}
+
+    if not os.path.exists(analyzer_script):
+        return {}
+
+    try:
+        result = subprocess.run(
+            [sys.executable, analyzer_script, transcript_path],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        return parse_analysis(result.stdout)
+    except Exception as e:
+        return {}
+
+
+def parse_analysis(analysis_text):
+    """Parse analysis output into structured data"""
+    data = {
+        'todos': [],
+        'thinking': [],
+        'tools': '',
+        'files': ''
+    }
+
+    lines = analysis_text.strip().split('\n')
+    section = None
+
+    for line in lines:
+        line = line.strip()
+        if line == 'TODOS_START':
+            section = 'todos'
+        elif line == 'TODOS_END':
+            section = None
+        elif line == 'THINKING_START':
+            section = 'thinking'
+        elif line == 'THINKING_END':
+            section = None
+        elif line.startswith('TOOLS:'):
+            data['tools'] = line.split(':', 1)[1]
+        elif line.startswith('FILES:'):
+            data['files'] = line.split(':', 1)[1]
+        elif section == 'todos':
+            data['todos'].append(line)
+        elif section == 'thinking':
+            data['thinking'].append(line)
+
+    return data
+
+
+def get_git_changes():
+    """Get git status if in a git repository"""
+    try:
+        # Check if in git repo
+        subprocess.run(
+            ['git', 'rev-parse', '--git-dir'],
+            capture_output=True,
+            check=True
+        )
+
+        # Get status
+        result = subprocess.run(
+            ['git', 'status', '--short'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+
+        lines = result.stdout.strip().split('\n')
+        modified = sum(1 for line in lines if line.startswith(' M'))
+        added = sum(1 for line in lines if line.startswith('??'))
+        staged = sum(1 for line in lines if line[0] in 'AM')
+
+        changes = []
+        if modified > 0:
+            changes.append(f"수정 {modified}개")
+        if added > 0:
+            changes.append(f"생성 {added}개")
+        if staged > 0:
+            changes.append(f"스테이징 {staged}개")
+
+        return ' '.join(changes) if changes else ''
+    except:
+        return ''
+
+
+def send_slack_message(token, channel, thread_ts, task_title, message):
+    """Send session end message to Slack thread"""
+    url = "https://slack.com/api/chat.postMessage"
+
+    payload = {
+        "channel": channel,
+        "thread_ts": thread_ts,
+        "text": f"✅ 작업 완료: {task_title}",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f"✅ 작업 완료: {task_title}",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": message
+                }
+            }
+        ]
+    }
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers
+        )
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result.get('ok', False)
+    except:
+        return False
+
+
+def main():
+    ppid = os.getppid()
+    temp_dir = Path(tempfile.gettempdir())
+
+    # Check for session file
+    session_file = temp_dir / f'.claude-session-{ppid}'
+    if not session_file.exists():
+        # No session start notification, skip end notification
+        sys.exit(0)
+
+    # Read session info
+    try:
+        with open(session_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            thread_ts = lines[0].strip()
+            start_time = int(lines[1].strip())
+    except:
+        sys.exit(0)
+
+    # Calculate duration
+    end_time = int(datetime.now().timestamp())
+    duration = end_time - start_time
+    minutes = duration // 60
+    seconds = duration % 60
+
+    # Load environment variables
+    env_file = Path.home() / '.ultrathink.env'
+    env_vars = load_env_file(env_file)
+
+    slack_token = env_vars.get('SLACK_BOT_TOKEN')
+    slack_channel = env_vars.get('SLACK_CHANNEL_ID', 'C09J29WDSHK')
+    slack_channel = slack_channel.lstrip('#')
+
+    # Read input
+    try:
+        input_data = json.load(sys.stdin)
+    except:
+        input_data = {}
+
+    transcript_path = input_data.get('transcript_path', '')
+
+    # Get task title
+    task_title_file = temp_dir / f'.claude-session-task-{ppid}'
+    if task_title_file.exists():
+        with open(task_title_file, 'r', encoding='utf-8') as f:
+            task_title = f.read().strip()
+    else:
+        task_title = '대화형 모드'
+
+    # Analyze transcript
+    script_dir = Path(__file__).parent
+    analyzer_script = script_dir / 'analyze_transcript.py'
+    analysis = analyze_transcript(transcript_path, analyzer_script)
+
+    # Build message
+    message_parts = [f"⏱️ *소요 시간:* {minutes}분 {seconds}초"]
+
+    if analysis.get('tools'):
+        message_parts.append(f"🔧 사용 도구: {analysis['tools']}")
+
+    if analysis.get('files'):
+        message_parts.append(f"📄 변경 파일: `{analysis['files']}`")
+
+    # Git changes
+    git_changes = get_git_changes()
+    if git_changes:
+        message_parts.append(f"📝 Git 변경: {git_changes}")
+
+    # Todos
+    if analysis.get('todos'):
+        todos_text = '\n'.join(analysis['todos'])
+        message_parts.append(f"\n\n📋 *작업 항목:*\n{todos_text}")
+
+    # Thinking
+    if analysis.get('thinking'):
+        thinking_text = '\n'.join(analysis['thinking'])
+        message_parts.append(f"\n\n💭 *주요 Thinking:*\n{thinking_text}")
+
+    full_message = '\n'.join(message_parts)
+
+    # Send to Slack
+    if slack_token and thread_ts:
+        send_slack_message(slack_token, slack_channel, thread_ts, task_title, full_message)
+
+    # Cleanup session files
+    try:
+        session_file.unlink()
+        if task_title_file.exists():
+            task_title_file.unlink()
+    except:
+        pass
+
+
+if __name__ == '__main__':
+    main()

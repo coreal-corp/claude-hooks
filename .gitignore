@@ -1,0 +1,28 @@
+# Claude Code user-specific configuration
+.claude/
+
+# Environment variables (contains sensitive tokens)
+.ultrathink.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Logs
+*.log
+/tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml

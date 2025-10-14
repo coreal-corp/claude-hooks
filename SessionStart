@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""
+SessionStart Hook - Cross-platform version
+Sends session start notification to Slack
+"""
+import sys
+import json
+import os
+import tempfile
+from pathlib import Path
+from datetime import datetime
+import platform
+import socket
+import urllib.request
+import urllib.error
+
+
+def load_env_file(env_path):
+    """Load environment variables from .env file"""
+    env_vars = {}
+    if not os.path.exists(env_path):
+        return env_vars
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                env_vars[key.strip()] = value.strip().strip('"').strip("'")
+    return env_vars
+
+
+def log_debug(message):
+    """Write debug log"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    debug_log = Path(tempfile.gettempdir()) / 'claude-hook-debug.log'
+    try:
+        with open(debug_log, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except:
+        pass
+
+
+def send_slack_message(token, channel, task_title, user_name, hostname, work_dir, timestamp):
+    """Send session start message to Slack"""
+    url = "https://slack.com/api/chat.postMessage"
+
+    # Truncate long titles
+    task_title_short = task_title[:60] + "..." if len(task_title) > 60 else task_title
+    task_title_body = task_title[:150] + "..." if len(task_title) > 150 else task_title
+
+    payload = {
+        "channel": channel,
+        "text": f"🚀 작업 시작: {task_title_short}",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🚀 작업 시작",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*작업 내용:*\n{task_title_body}"
+                }
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*사용자:*\n`{user_name}@{hostname}`"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*디렉토리:*\n`{work_dir}`"
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*시작:*\n{timestamp}"
+                    }
+                ]
+            }
+        ]
+    }
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json; charset=utf-8'
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers
+        )
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result.get('ok', False), result.get('ts', '')
+    except Exception as e:
+        log_debug(f"Slack API error: {str(e)}")
+        return False, ''
+
+
+def main():
+    ppid = os.getppid()
+    log_debug(f"SessionStart hook started (PPID: {ppid})")
+
+    # Load environment variables
+    env_file = Path.home() / '.ultrathink.env'
+    env_vars = load_env_file(env_file)
+
+    if not env_vars:
+        log_debug("ERROR: .ultrathink.env file not found")
+        sys.exit(1)
+
+    log_debug("Environment variables loaded")
+
+    # Get system info
+    try:
+        user_name = os.getlogin()
+    except:
+        user_name = os.environ.get('USER', os.environ.get('USERNAME', 'unknown'))
+
+    hostname = socket.gethostname()
+    work_dir = os.getcwd()
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # Read input from stdin
+    try:
+        input_data = json.load(sys.stdin)
+    except:
+        input_data = {}
+
+    # Extract task command
+    task_command = input_data.get('initial_user_message', '')
+    task_title = task_command if task_command else '대화형 모드'
+
+    log_debug(f"Task title: {task_title}")
+
+    # Slack configuration
+    slack_token = env_vars.get('SLACK_BOT_TOKEN')
+    slack_channel = env_vars.get('SLACK_CHANNEL_ID', 'C09J29WDSHK')
+    slack_channel = slack_channel.lstrip('#')
+
+    if not slack_token:
+        log_debug("ERROR: SLACK_BOT_TOKEN not found")
+        sys.exit(1)
+
+    # Send session start notification
+    success, thread_ts = send_slack_message(
+        slack_token,
+        slack_channel,
+        task_title,
+        user_name,
+        hostname,
+        work_dir,
+        timestamp
+    )
+
+    if success:
+        # Save session info for SessionEnd
+        session_file = Path(tempfile.gettempdir()) / f'.claude-session-{ppid}'
+        task_file = Path(tempfile.gettempdir()) / f'.claude-session-task-{ppid}'
+
+        try:
+            with open(session_file, 'w', encoding='utf-8') as f:
+                f.write(f"{thread_ts}\n")
+                f.write(f"{int(datetime.now().timestamp())}\n")
+
+            with open(task_file, 'w', encoding='utf-8') as f:
+                f.write(task_title)
+
+            log_debug(f"Slack notification sent successfully - Task: {task_title} (ts: {thread_ts})")
+        except Exception as e:
+            log_debug(f"Failed to save session info: {str(e)}")
+    else:
+        log_debug("ERROR: Slack notification failed")
+
+
+if __name__ == '__main__':
+    main()

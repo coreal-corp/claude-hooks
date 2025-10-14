@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""
+Stop Hook - Cross-platform version
+Sends detailed completion notification to Slack
+"""
+import sys
+import json
+import os
+import tempfile
+import subprocess
+import time
+from pathlib import Path
+from datetime import datetime
+import urllib.request
+import urllib.error
+
+
+def load_env_file(env_path):
+    """Load environment variables from .env file"""
+    env_vars = {}
+    if not os.path.exists(env_path):
+        return env_vars
+
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                env_vars[key.strip()] = value.strip().strip('"').strip("'")
+    return env_vars
+
+
+def log_debug(message):
+    """Write debug log"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    debug_log = Path(tempfile.gettempdir()) / 'claude-hook-debug.log'
+    try:
+        with open(debug_log, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except:
+        pass
+
+
+def check_duplicate_lock(transcript_path):
+    """Check and set duplicate execution lock"""
+    if not transcript_path:
+        return False
+
+    transcript_name = Path(transcript_path).stem
+    lock_file = Path(tempfile.gettempdir()) / f'.claude-stop-{transcript_name}'
+
+    if lock_file.exists():
+        try:
+            with open(lock_file, 'r') as f:
+                lock_time = int(f.read().strip())
+            current_time = int(time.time())
+            if current_time - lock_time < 3:
+                log_debug(f"Duplicate execution prevented ({current_time - lock_time}s ago)")
+                return True
+        except:
+            pass
+
+    # Set new lock
+    try:
+        with open(lock_file, 'w') as f:
+            f.write(str(int(time.time())))
+    except:
+        pass
+
+    return False
+
+
+def analyze_transcript(transcript_path, analyzer_script):
+    """Analyze transcript using Python analyzer"""
+    if not os.path.exists(transcript_path):
+        return {}
+
+    if not os.path.exists(analyzer_script):
+        log_debug(f"Analyzer not found: {analyzer_script}")
+        return {}
+
+    try:
+        result = subprocess.run(
+            [sys.executable, analyzer_script, transcript_path],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+        log_debug(f"Analysis result:\n{result.stdout}")
+        return parse_analysis(result.stdout)
+    except Exception as e:
+        log_debug(f"Analysis error: {str(e)}")
+        return {}
+
+
+def parse_analysis(analysis_text):
+    """Parse analysis output into structured data"""
+    data = {
+        'todos': [],
+        'thinking': []
+    }
+
+    lines = analysis_text.strip().split('\n')
+    section = None
+
+    for line in lines:
+        line = line.strip()
+        if line == 'TODOS_START':
+            section = 'todos'
+        elif line == 'TODOS_END':
+            section = None
+        elif line == 'THINKING_START':
+            section = 'thinking'
+        elif line == 'THINKING_END':
+            section = None
+        elif section == 'todos' and line:
+            data['todos'].append(line)
+        elif section == 'thinking' and line:
+            data['thinking'].append(line)
+
+    return data
+
+
+def send_slack_message(token, channel, message):
+    """Send completion message to Slack"""
+    url = "https://slack.com/api/chat.postMessage"
+
+    payload = {
+        "channel": channel,
+        "text": "✅ 작업 완료",
+        "blocks": [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "✅ 작업 완료",
+                    "emoji": True
+                }
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": message
+                }
+            }
+        ]
+    }
+
+    headers = {
+        'Authorization': f'Bearer {token}',
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode('utf-8'),
+            headers=headers
+        )
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            return result.get('ok', False)
+    except Exception as e:
+        log_debug(f"Slack API error: {str(e)}")
+        return False
+
+
+def cleanup_lock_file(lock_file, delay=30):
+    """Schedule lock file cleanup after delay"""
+    import threading
+
+    def cleanup():
+        time.sleep(delay)
+        try:
+            if os.path.exists(lock_file):
+                os.remove(lock_file)
+        except:
+            pass
+
+    thread = threading.Thread(target=cleanup, daemon=True)
+    thread.start()
+
+
+def main():
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_debug(f"Stop hook started")
+
+    # Read input from stdin
+    try:
+        input_data = json.load(sys.stdin)
+    except:
+        input_data = {}
+
+    transcript_path = input_data.get('transcript_path', '')
+
+    # Check for duplicate execution
+    if check_duplicate_lock(transcript_path):
+        sys.exit(0)
+
+    # Load environment variables
+    env_file = Path.home() / '.ultrathink.env'
+    env_vars = load_env_file(env_file)
+
+    slack_token = env_vars.get('SLACK_BOT_TOKEN')
+    slack_channel = env_vars.get('SLACK_CHANNEL_ID', 'C09J29WDSHK')
+    slack_channel = slack_channel.lstrip('#')
+
+    work_dir = os.getcwd()
+
+    log_debug(f"Transcript: {transcript_path}")
+
+    # Analyze transcript
+    analysis = {}
+    if transcript_path and os.path.exists(transcript_path):
+        script_dir = Path(__file__).parent
+        analyzer_script = script_dir / 'analyze_transcript.py'
+        analysis = analyze_transcript(transcript_path, analyzer_script)
+
+    # Build message
+    message_parts = []
+
+    # Todos
+    if analysis.get('todos'):
+        todos_text = '\n'.join(analysis['todos'])
+        message_parts.append(f"📋 *작업 내용:*\n{todos_text}")
+
+    # Thinking
+    if analysis.get('thinking'):
+        thinking_text = '\n'.join(analysis['thinking'])
+        message_parts.append(f"\n\n💭 *검토 사항:*\n{thinking_text}")
+
+    full_message = '\n'.join(message_parts) if message_parts else "작업이 완료되었습니다."
+
+    log_debug("Sending to Slack")
+
+    # Send to Slack
+    if slack_token:
+        success = send_slack_message(slack_token, slack_channel, full_message)
+        if success:
+            log_debug("Slack message sent successfully")
+        else:
+            log_debug("Slack message failed")
+
+    # Schedule lock file cleanup
+    if transcript_path:
+        transcript_name = Path(transcript_path).stem
+        lock_file = Path(tempfile.gettempdir()) / f'.claude-stop-{transcript_name}'
+        cleanup_lock_file(str(lock_file))
+
+
+if __name__ == '__main__':
+    main()
