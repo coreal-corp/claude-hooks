@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""
+Manual Update Script for Claude Code Hooks
+Force immediate update from GitHub repository
+"""
+import sys
+import subprocess
+import shutil
+from pathlib import Path
+
+
+def print_step(message):
+    """Print step with emoji"""
+    print(f"🎯 {message}")
+
+
+def print_success(message):
+    """Print success message"""
+    print(f"✅ {message}")
+
+
+def print_error(message):
+    """Print error message"""
+    print(f"❌ {message}")
+
+
+def print_warning(message):
+    """Print warning message"""
+    print(f"⚠️  {message}")
+
+
+def main():
+    hooks_dir = Path.home() / '.claude-hooks'
+
+    print("")
+    print("=" * 50)
+    print("  Claude Code Hooks - Manual Update")
+    print("=" * 50)
+    print("")
+
+    # Check if git repository
+    if not (hooks_dir / '.git').exists():
+        print_error("Not a git repository!")
+        print("")
+        print("This directory was not installed via git clone.")
+        print("Please reinstall using:")
+        print("  git clone https://github.com/coreal-corp/claude-hooks.git")
+        print("")
+        sys.exit(1)
+
+    # Check for local changes
+    print_step("Checking for local changes...")
+    result = subprocess.run(
+        ['git', 'status', '--porcelain'],
+        cwd=hooks_dir,
+        capture_output=True,
+        text=True
+    )
+
+    if result.stdout.strip():
+        print_warning("Local changes detected:")
+        print(result.stdout)
+        print("")
+        print("Options:")
+        print("  1. Stash changes: git stash")
+        print("  2. Commit changes: git add . && git commit -m 'local changes'")
+        print("  3. Discard changes: git reset --hard (WARNING: loses changes)")
+        print("")
+        choice = input("Continue anyway? (y/n): ")
+        if choice.lower() != 'y':
+            print("")
+            print_error("Update cancelled")
+            sys.exit(1)
+
+    # Backup hook files
+    print_step("Creating backup...")
+    backup_dir = hooks_dir / '.backup'
+    backup_dir.mkdir(exist_ok=True)
+
+    hook_files = ['SessionStart', 'SessionEnd', 'Stop', 'Notification', 'analyze_transcript.py', 'auto_update.py']
+
+    for filename in hook_files:
+        src = hooks_dir / filename
+        if src.exists():
+            dst = backup_dir / filename
+            shutil.copy2(src, dst)
+
+    print_success("Backup created")
+
+    # Fetch from remote
+    print_step("Fetching updates from GitHub...")
+    result = subprocess.run(
+        ['git', 'fetch', 'origin'],
+        cwd=hooks_dir,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print_error("Failed to fetch from remote")
+        print(result.stderr)
+        sys.exit(1)
+
+    # Check for updates
+    result = subprocess.run(
+        ['git', 'rev-list', 'HEAD..origin/main', '--count'],
+        cwd=hooks_dir,
+        capture_output=True,
+        text=True
+    )
+
+    new_commits = int(result.stdout.strip())
+
+    if new_commits == 0:
+        print_success("Already up to date!")
+        print("")
+        sys.exit(0)
+
+    print_success(f"Found {new_commits} new commit(s)")
+
+    # Show what will be updated
+    print_step("Changes to be applied:")
+    result = subprocess.run(
+        ['git', 'log', 'HEAD..origin/main', '--oneline'],
+        cwd=hooks_dir,
+        capture_output=True,
+        text=True
+    )
+    print(result.stdout)
+
+    # Pull updates
+    print_step("Applying updates...")
+    result = subprocess.run(
+        ['git', 'pull', 'origin', 'main'],
+        cwd=hooks_dir,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        print_error("Update failed!")
+        print(result.stderr)
+        print("")
+        print_step("Restoring from backup...")
+
+        # Restore backup
+        for backup_file in backup_dir.glob('*'):
+            if backup_file.is_file():
+                dst = hooks_dir / backup_file.name
+                shutil.copy2(backup_file, dst)
+
+        print_success("Restored from backup")
+        sys.exit(1)
+
+    print_success("Update complete!")
+    print("")
+    print("=" * 50)
+    print("")
+    print("Updated hooks:")
+    print(result.stdout)
+    print("")
+    print("The hooks will use the new version on next Claude Code session.")
+    print("")
+
+
+if __name__ == '__main__':
+    main()

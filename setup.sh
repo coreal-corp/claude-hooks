@@ -281,7 +281,7 @@ fi
 # Step 3: Copy hook files
 print_msg step "Step 3: Hook 파일 복사 중..."
 
-HOOK_FILES=("SessionStart" "SessionEnd" "Stop" "Notification" "analyze_transcript.py")
+HOOK_FILES=("SessionStart" "SessionEnd" "Stop" "Notification" "analyze_transcript.py" "auto_update.py" "update")
 
 for file in "${HOOK_FILES[@]}"; do
     if [ -f "$SCRIPT_DIR/$file" ]; then
@@ -313,6 +313,10 @@ ULTRATHINK_AUTO_LOG=true
 
 # 사용자 이름 (선택)
 SLACK_USER_NAME=your_name
+
+# Auto-update settings
+AUTO_UPDATE_ENABLED=true
+UPDATE_CHECK_INTERVAL=86400
 EOF
     print_msg success "환경 변수 템플릿 생성: $ENV_FILE"
     print_msg warning "⚠️  $ENV_FILE 파일을 편집하여 Slack 토큰을 설정하세요!"

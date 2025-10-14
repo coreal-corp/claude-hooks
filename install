@@ -574,7 +574,7 @@ fi
 # Step 3: Copy hook files
 print_msg step "Step 3: Copying hook files..."
 
-HOOK_FILES=("SessionStart" "SessionEnd" "Stop" "Notification" "analyze_transcript.py")
+HOOK_FILES=("SessionStart" "SessionEnd" "Stop" "Notification" "analyze_transcript.py" "auto_update.py" "update")
 
 for file in "${HOOK_FILES[@]}"; do
     if [ -f "$SCRIPT_DIR/$file" ]; then
@@ -606,6 +606,10 @@ ULTRATHINK_AUTO_LOG=true
 
 # User name (optional)
 SLACK_USER_NAME=your_name
+
+# Auto-update settings
+AUTO_UPDATE_ENABLED=true
+UPDATE_CHECK_INTERVAL=86400
 EOF
     print_msg success "Environment template created: $ENV_FILE"
     print_msg warning "Edit $ENV_FILE to set your Slack token!"

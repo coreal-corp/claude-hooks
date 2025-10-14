@@ -179,7 +179,7 @@ REM Step 3: Copy hook files
 echo.
 echo [*] Step 3: Hook 파일 복사 중...
 
-set "FILES=SessionStart SessionEnd Stop Notification analyze_transcript.py"
+set "FILES=SessionStart SessionEnd Stop Notification analyze_transcript.py auto_update.py update"
 
 for %%f in (%FILES%) do (
     if exist "%SCRIPT_DIR%%%f" (
@@ -209,6 +209,10 @@ if not exist "%ENV_FILE%" (
         echo.
         echo # 사용자 이름 (선택^)
         echo SLACK_USER_NAME=your_name
+        echo.
+        echo # Auto-update settings
+        echo AUTO_UPDATE_ENABLED=true
+        echo UPDATE_CHECK_INTERVAL=86400
     ) > "%ENV_FILE%"
     echo [+] 환경 변수 템플릿 생성: %ENV_FILE%
     echo [!] ⚠️  %ENV_FILE% 파일을 편집하여 Slack 토큰을 설정하세요!
