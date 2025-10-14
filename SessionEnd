@@ -54,8 +54,7 @@ def parse_analysis(analysis_text):
     data = {
         'todos': [],
         'thinking': [],
-        'tools': '',
-        'files': ''
+        'plan': []
     }
 
     lines = analysis_text.strip().split('\n')
@@ -71,14 +70,16 @@ def parse_analysis(analysis_text):
             section = 'thinking'
         elif line == 'THINKING_END':
             section = None
-        elif line.startswith('TOOLS:'):
-            data['tools'] = line.split(':', 1)[1]
-        elif line.startswith('FILES:'):
-            data['files'] = line.split(':', 1)[1]
-        elif section == 'todos':
+        elif line == 'PLAN_START':
+            section = 'plan'
+        elif line == 'PLAN_END':
+            section = None
+        elif section == 'todos' and line:
             data['todos'].append(line)
-        elif section == 'thinking':
+        elif section == 'thinking' and line:
             data['thinking'].append(line)
+        elif section == 'plan' and line:
+            data['plan'].append(line)
 
     return data
 
@@ -220,6 +221,11 @@ def main():
 
     # Build message
     message_parts = [f"⏱️ *소요 시간:* {minutes}분 {seconds}초"]
+
+    # Plan (if exists)
+    if analysis.get('plan'):
+        plan_text = '\n'.join(analysis['plan'])
+        message_parts.append(f"\n📋 *작업 계획:*\n{plan_text}")
 
     # Todos
     if analysis.get('todos'):

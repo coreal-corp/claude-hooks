@@ -30,6 +30,7 @@ try:
     todos_list = []
     thinkings = []
     user_requests = []
+    plans = []
 
     # 최근 메시지 분석 (마지막 100개 - 충분한 컨텍스트)
     for line in lines[-100:]:
@@ -66,8 +67,15 @@ try:
 
                 block_type = block.get('type', '')
 
+                # ExitPlanMode 추출 (Plan 모드)
+                if block_type == 'tool_use' and block.get('name') == 'ExitPlanMode':
+                    input_data = block.get('input', {})
+                    plan_text = input_data.get('plan', '')
+                    if plan_text and plan_text not in plans:
+                        plans.append(plan_text)
+
                 # TodoWrite 추출
-                if block_type == 'tool_use' and block.get('name') == 'TodoWrite':
+                elif block_type == 'tool_use' and block.get('name') == 'TodoWrite':
                     input_data = block.get('input', {})
                     todos = input_data.get('todos', [])
                     for todo in todos:
@@ -88,6 +96,7 @@ try:
     # 신규 항목만 필터링
     new_todos = []
     new_requests = []
+    new_plans = []
 
     for todo in todos_list:
         todo_hash = hashlib.md5(todo['content'].encode()).hexdigest()
@@ -100,6 +109,12 @@ try:
         if req_hash not in reported_items:
             new_requests.append(req)
             reported_items.add(req_hash)
+
+    for plan in plans:
+        plan_hash = hashlib.md5(plan.encode()).hexdigest()
+        if plan_hash not in reported_items:
+            new_plans.append(plan)
+            reported_items.add(plan_hash)
 
     # 보고 이력 저장
     with open(reported_file, 'w') as f:
@@ -200,6 +215,15 @@ try:
             print("THINKING_START")
             print(f"• {clean_thinking}")
             print("THINKING_END")
+
+    # Plan 출력 (새로운 계획만)
+    if new_plans:
+        print("PLAN_START")
+        # 최신 계획만 출력 (보통 하나만 있음)
+        plan = new_plans[-1]
+        # Plan은 이미 잘 정리된 마크다운이므로 그대로 출력
+        print(plan[:500])  # 최대 500자로 제한
+        print("PLAN_END")
 
 except Exception as e:
     print(f"ERROR:{str(e)}", file=sys.stderr)

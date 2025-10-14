@@ -97,7 +97,8 @@ def parse_analysis(analysis_text):
     """Parse analysis output into structured data"""
     data = {
         'todos': [],
-        'thinking': []
+        'thinking': [],
+        'plan': []
     }
 
     lines = analysis_text.strip().split('\n')
@@ -113,10 +114,16 @@ def parse_analysis(analysis_text):
             section = 'thinking'
         elif line == 'THINKING_END':
             section = None
+        elif line == 'PLAN_START':
+            section = 'plan'
+        elif line == 'PLAN_END':
+            section = None
         elif section == 'todos' and line:
             data['todos'].append(line)
         elif section == 'thinking' and line:
             data['thinking'].append(line)
+        elif section == 'plan' and line:
+            data['plan'].append(line)
 
     return data
 
@@ -220,10 +227,15 @@ def main():
     # Build message
     message_parts = []
 
+    # Plan (if exists)
+    if analysis.get('plan'):
+        plan_text = '\n'.join(analysis['plan'])
+        message_parts.append(f"📋 *작업 계획:*\n{plan_text}")
+
     # Todos
     if analysis.get('todos'):
         todos_text = '\n'.join(analysis['todos'])
-        message_parts.append(f"📋 *작업 내용:*\n{todos_text}")
+        message_parts.append(f"\n📋 *작업 내용:*\n{todos_text}")
 
     # Thinking
     if analysis.get('thinking'):
