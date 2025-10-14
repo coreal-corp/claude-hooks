@@ -29,9 +29,6 @@ try:
 
     todos_list = []
     thinkings = []
-    tools_count = {}
-    files_modified = set()
-    files_analyzed = set()
     user_requests = []
 
     # 최근 메시지 분석 (마지막 100개 - 충분한 컨텍스트)
@@ -84,24 +81,6 @@ try:
                     thinking_text = block.get('thinking', '').strip()
                     if len(thinking_text) > 50 and thinking_text not in thinkings:
                         thinkings.append(thinking_text[:200])
-
-                # Tool 사용 추적
-                elif block_type == 'tool_use':
-                    tool_name = block.get('name', '')
-                    if tool_name:
-                        tools_count[tool_name] = tools_count.get(tool_name, 0) + 1
-
-                    input_data = block.get('input', {})
-
-                    if tool_name in ['Edit', 'Write']:
-                        file_path = input_data.get('file_path', '')
-                        if file_path:
-                            files_modified.add(file_path.split('/')[-1])
-
-                    elif tool_name in ['Read', 'Grep']:
-                        file_path = input_data.get('file_path') or input_data.get('path', '')
-                        if file_path:
-                            files_analyzed.add(file_path.split('/')[-1])
 
         except:
             continue
@@ -185,15 +164,6 @@ try:
             work_todos.append("크로스 플랫폼 호환성 확보 작업")
         elif '중복' in req:
             work_todos.append("중복 보고 방지 로직 구현")
-
-    # 파일 작업을 투두로 변환 (work_todos 없을 때만)
-    if not work_todos and files_modified:
-        # 파일명으로 작업 유추
-        modified_list = list(files_modified)[:3]
-        if len(modified_list) == 1:
-            work_todos.append(f"{modified_list[0]} 코드 수정")
-        else:
-            work_todos.append(f"{', '.join(modified_list)} 등 {len(files_modified)}개 파일 수정")
 
     # 출력 - 신규 항목만
     if new_todos:
