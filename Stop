@@ -236,10 +236,6 @@ def main():
     # Build message with command summary as header
     message_parts = []
 
-    # Add command summary as first line if available
-    if command_summary:
-        message_parts.append(f"*작업:* {command_summary}\n")
-
     # Plan (if exists)
     if analysis.get('plan'):
         plan_text = '\n'.join(analysis['plan'])
@@ -248,17 +244,63 @@ def main():
     # Todos
     if analysis.get('todos'):
         todos_text = '\n'.join(analysis['todos'])
-        message_parts.append(f"\n📋 *작업 내용:*\n{todos_text}")
+        message_parts.append(f"\n📋 *작업 내역:*\n{todos_text}")
 
     # Thinking
     if analysis.get('thinking'):
         thinking_text = '\n'.join(analysis['thinking'])
         message_parts.append(f"\n💭 *검토 사항:*\n{thinking_text}")
 
+    # Git changes with file details
+    try:
+        # Check if in git repo
+        subprocess.run(
+            ['git', 'rev-parse', '--git-dir'],
+            capture_output=True,
+            check=True
+        )
+
+        # Get status
+        result = subprocess.run(
+            ['git', 'status', '--short'],
+            capture_output=True,
+            text=True,
+            encoding='utf-8'
+        )
+
+        lines = result.stdout.strip().split('\n')
+        modified = [line[3:] for line in lines if line.startswith(' M')]
+        added = [line[3:] for line in lines if line.startswith('??')]
+        staged = [line[3:] for line in lines if line[0] in 'AM']
+
+        changes = []
+        if len(modified) > 0:
+            changes.append(f"수정 {len(modified)}개")
+        if len(added) > 0:
+            changes.append(f"생성 {len(added)}개")
+        if len(staged) > 0:
+            changes.append(f"스테이징 {len(staged)}개")
+
+        if changes:
+            message_parts.append(f"\n📝 *Git 변경:* {' '.join(changes)}")
+
+            # Show file list if not too many
+            all_files = modified + added + staged
+            unique_files = list(dict.fromkeys(all_files))  # Remove duplicates
+            if unique_files and len(unique_files) <= 5:
+                files_list = '\n'.join([f"  • `{f}`" for f in unique_files])
+                message_parts.append(f"\n*수정된 파일:*\n{files_list}")
+    except:
+        pass
+
+    # 빈 메시지 방지: 최소한의 정보 제공
+    if not message_parts:
+        message_parts.append(f"✅ *작업:* {command_summary}")
+
     # Project path at bottom
     message_parts.append(f"\n:open_file_folder: 프로젝트: `{work_dir}`")
 
-    full_message = '\n'.join(message_parts) if message_parts else f"작업이 완료되었습니다.\n\n:open_file_folder: 프로젝트: `{work_dir}`"
+    full_message = '\n'.join(message_parts)
 
     # Create title with command summary
     slack_title = f"✅ 작업 완료: {command_summary}" if command_summary else "✅ 작업 완료"

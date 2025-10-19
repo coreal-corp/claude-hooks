@@ -31,6 +31,8 @@ try:
     thinkings = []
     user_requests = []
     plans = []
+    files_modified = []
+    bash_commands = []
 
     # 최근 메시지 분석 (마지막 100개 - 충분한 컨텍스트)
     for line in lines[-100:]:
@@ -84,6 +86,21 @@ try:
                         if content_text and content_text not in [t['content'] for t in todos_list]:
                             todos_list.append({'content': content_text, 'status': status})
 
+                # 파일 수정 추출 (Edit/Write)
+                elif block_type == 'tool_use' and block.get('name') in ['Edit', 'Write']:
+                    input_data = block.get('input', {})
+                    file_path = input_data.get('file_path', '')
+                    if file_path and file_path not in files_modified:
+                        files_modified.append(file_path)
+
+                # Bash 명령 추출
+                elif block_type == 'tool_use' and block.get('name') == 'Bash':
+                    input_data = block.get('input', {})
+                    command = input_data.get('command', '')
+                    desc = input_data.get('description', '')
+                    if command and len(command) < 200:
+                        bash_commands.append({'cmd': command, 'desc': desc})
+
                 # Thinking 추출 (의미있는 것만)
                 elif block_type == 'thinking':
                     thinking_text = block.get('thinking', '').strip()
@@ -134,7 +151,44 @@ try:
             main_task = completed_todos[0]['content'][:30]
             command_summary = f"{len(completed_todos)}개 작업 완료: {main_task}..."
 
-    # 2순위: 사용자 요청 키워드 기반 (completed todos 없을 때만)
+    # 2순위: 파일 수정 기반 요약
+    elif files_modified:
+        file_count = len(files_modified)
+        if file_count == 1:
+            file_name = os.path.basename(files_modified[0])
+            command_summary = f"{file_name} 수정"
+        elif file_count <= 3:
+            file_names = [os.path.basename(f) for f in files_modified]
+            command_summary = f"{', '.join(file_names)} 수정"
+        else:
+            command_summary = f"{file_count}개 파일 수정"
+
+    # 3순위: bash 명령 기반 요약
+    elif bash_commands:
+        # git 명령 우선
+        git_cmds = [c for c in bash_commands if 'git' in c['cmd']]
+        if git_cmds:
+            if 'commit' in git_cmds[-1]['cmd']:
+                command_summary = "Git 커밋"
+            elif 'push' in git_cmds[-1]['cmd']:
+                command_summary = "Git 푸시"
+            else:
+                command_summary = "Git 작업"
+        # 테스트 명령
+        elif any('test' in c['cmd'] or 'pytest' in c['cmd'] for c in bash_commands):
+            command_summary = "테스트 실행"
+        # 빌드 명령
+        elif any('build' in c['cmd'] or 'npm' in c['cmd'] for c in bash_commands):
+            command_summary = "빌드 실행"
+        else:
+            # 마지막 명령의 description 사용
+            last_desc = bash_commands[-1].get('desc', '')
+            if last_desc and len(last_desc) < 50:
+                command_summary = last_desc
+            else:
+                command_summary = f"{len(bash_commands)}개 명령 실행"
+
+    # 4순위: 사용자 요청 키워드 기반
     elif new_requests:
         req = new_requests[-1]
         req_lower = req.lower()
@@ -155,8 +209,12 @@ try:
         elif '개선' in req or 'improve' in req_lower:
             command_summary = "기능 개선"
         else:
-            # 키워드 없으면 일반 메시지
-            command_summary = "작업 완료"
+            # 사용자 요청 첫 50자 사용
+            command_summary = req[:50]
+
+    # 5순위: 기본값
+    else:
+        command_summary = "작업 완료"
 
     # 파일 작업을 투두 리스트로 변환
     work_todos = []
@@ -226,25 +284,25 @@ try:
 
     # 출력 - 신규 항목만
     if new_todos:
-        # 완료된 항목만 필터링
-        completed_todos = [t for t in new_todos if t['status'] == 'completed']
-
-        if completed_todos:
-            print("TODOS_START")
-            for idx, todo in enumerate(completed_todos, 1):
-                print(f"{idx}. ✅ {todo['content']}")
-            print("TODOS_END")
-        else:
-            # 완료된 항목이 없으면 진행 중 또는 대기 중 항목 표시
-            print("TODOS_START")
-            for todo in new_todos[-5:]:
-                icon = "✅" if todo['status'] == 'completed' else "🔄" if todo['status'] == 'in_progress' else "⏳"
-                print(f"{icon} {todo['content']}")
-            print("TODOS_END")
+        # 모든 상태의 todos 표시 (최대 10개)
+        print("TODOS_START")
+        for todo in new_todos[-10:]:
+            icon = "✅" if todo['status'] == 'completed' else "🔄" if todo['status'] == 'in_progress' else "⏳"
+            print(f"{icon} {todo['content']}")
+        print("TODOS_END")
     elif work_todos:
         print("TODOS_START")
         for idx, work in enumerate(work_todos, 1):
             print(f"{idx}. ✅ {work}")
+        print("TODOS_END")
+    elif files_modified:
+        # todos가 없으면 파일 수정 내역 표시
+        print("TODOS_START")
+        for idx, file_path in enumerate(files_modified[:10], 1):
+            file_name = os.path.basename(file_path)
+            print(f"{idx}. 📝 {file_name}")
+        if len(files_modified) > 10:
+            print(f"...외 {len(files_modified) - 10}개")
         print("TODOS_END")
 
     if thinkings:

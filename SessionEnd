@@ -242,17 +242,36 @@ def main():
     # Todos
     if analysis.get('todos'):
         todos_text = '\n'.join(analysis['todos'])
-        message_parts.append(f"\n📋 *완료한 작업:*\n{todos_text}")
+        message_parts.append(f"\n📋 *작업 내역:*\n{todos_text}")
 
     # Thinking
     if analysis.get('thinking'):
         thinking_text = '\n'.join(analysis['thinking'])
-        message_parts.append(f"\n💭 *주요 사항:*\n{thinking_text}")
+        message_parts.append(f"\n💭 *검토 사항:*\n{thinking_text}")
 
-    # Git changes
+    # Git changes with file details
     git_changes = get_git_changes()
     if git_changes:
         message_parts.append(f"\n📝 *Git 변경:* {git_changes}")
+
+        # Get modified files list
+        try:
+            result = subprocess.run(
+                ['git', 'diff', '--name-only'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8'
+            )
+            modified_files = [f for f in result.stdout.strip().split('\n') if f]
+            if modified_files and len(modified_files) <= 5:
+                files_list = '\n'.join([f"  • `{f}`" for f in modified_files])
+                message_parts.append(f"\n*수정된 파일:*\n{files_list}")
+        except:
+            pass
+
+    # 빈 메시지 방지: 최소한의 정보 제공
+    if len(message_parts) == 1:  # 소요 시간만 있음
+        message_parts.append(f"\n✅ *작업:* {task_title}")
 
     # Project path at bottom
     message_parts.append(f"\n:open_file_folder: 프로젝트: `{work_dir}`")
