@@ -120,28 +120,32 @@ try:
     with open(reported_file, 'w') as f:
         f.write('\n'.join(reported_items))
 
-    # 사용자 명령 요약 생성
+    # 실제 작업 내용 기반 요약 생성
     command_summary = ""
 
-    if new_requests:
+    # 1순위: completed todos에서 요약 생성
+    completed_todos = [t for t in new_todos if t.get('status') == 'completed']
+    if completed_todos:
+        if len(completed_todos) == 1:
+            # 단일 작업: 작업 내용 그대로 사용
+            command_summary = completed_todos[0]['content'][:50]
+        else:
+            # 다중 작업: 개수 + 주요 작업
+            main_task = completed_todos[0]['content'][:30]
+            command_summary = f"{len(completed_todos)}개 작업 완료: {main_task}..."
+
+    # 2순위: 사용자 요청 키워드 기반 (completed todos 없을 때만)
+    elif new_requests:
         req = new_requests[-1]
         req_lower = req.lower()
 
-        # 명령 요약 생성 (간결한 헤더용)
+        # 키워드 매칭으로 작업 유형 추론
         if 'gitlab' in req_lower and ('푸시' in req or 'push' in req_lower):
             command_summary = "GitLab 자동 푸시"
         elif 'gitlab' in req_lower and ('저장소' in req or 'repository' in req_lower):
             command_summary = "GitLab 저장소 설정"
-        elif '알림' in req and '형식' in req:
-            command_summary = "작업 알림 형식 개선"
-        elif '요약' in req and '헤더' in req:
-            command_summary = "명령 요약 표시 기능"
         elif 'hook' in req_lower and '설치' in req:
             command_summary = "Hook 시스템 설치"
-        elif '환경' in req and ('독립' in req or '호환' in req):
-            command_summary = "크로스 플랫폼 호환성 검증"
-        elif '업데이트' in req and 'github' in req_lower:
-            command_summary = "GitHub 최신 버전 업데이트"
         elif '분석' in req and ('코드' in req or '프로젝트' in req):
             command_summary = "프로젝트 분석"
         elif '수정' in req or 'fix' in req_lower:
@@ -150,13 +154,9 @@ try:
             command_summary = "기능 추가"
         elif '개선' in req or 'improve' in req_lower:
             command_summary = "기능 개선"
-        elif '테스트' in req or 'test' in req_lower:
-            command_summary = "기능 테스트"
         else:
-            # 일반적인 경우: 첫 문장 또는 처음 50자
-            command_summary = req[:50].strip()
-            if len(command_summary) > 40:
-                command_summary = command_summary[:40] + "..."
+            # 키워드 없으면 일반 메시지
+            command_summary = "작업 완료"
 
     # 파일 작업을 투두 리스트로 변환
     work_todos = []
