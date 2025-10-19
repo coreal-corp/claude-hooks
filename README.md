@@ -90,7 +90,78 @@ ULTRATHINK_AUTO_LOG=true
 
 # 사용자 이름 (선택)
 SLACK_USER_NAME=your_name
+
+# GitLab 자동 푸시 (선택 - 활성화하려면 true로 변경)
+GITLAB_AUTO_PUSH_ENABLED=false
+GITLAB_REPO_URL=https://gitlab.com/your-username/your-repo.git
+GITLAB_ACCESS_TOKEN=your-gitlab-token
 ```
+
+## 🔄 GitLab 자동 푸시 (선택 기능)
+
+작업 완료 시 자동으로 변경사항을 GitLab에 커밋하고 푸시합니다.
+
+### 🚀 빠른 설정 (권장)
+
+**대화형 설정 마법사 실행:**
+
+```bash
+python3 ~/.claude-hooks/setup_gitlab.py
+```
+
+설정 마법사가 자동으로:
+- ✅ GitLab Access Token 확인
+- ✅ 기존 저장소 목록 조회
+- ✅ 저장소 선택 또는 새로 생성
+- ✅ 환경 변수 자동 저장
+- ✅ 테스트 푸시 (선택)
+
+### ⚙️ 수동 설정
+
+1. **GitLab Access Token 생성**
+   - GitLab > Settings > Access Tokens
+   - Scopes: `api`, `write_repository` 선택
+   - Token 복사
+
+2. **환경 변수 설정** (`~/.ultrathink.env`):
+   ```bash
+   # GitLab 자동 푸시 활성화
+   GITLAB_AUTO_PUSH_ENABLED=true
+
+   # GitLab 저장소 URL
+   GITLAB_REPO_URL=https://gitlab.com/your-username/your-repo.git
+
+   # GitLab Access Token
+   GITLAB_ACCESS_TOKEN=glpat-your-token-here
+
+   # Remote 이름 (선택, 기본값: gitlab)
+   GITLAB_REMOTE_NAME=gitlab
+
+   # 커밋 메시지 (선택, 비워두면 자동 생성)
+   GITLAB_AUTO_COMMIT_MESSAGE=
+   ```
+
+### 💡 동작 방식
+
+1. SessionEnd 또는 Stop hook 실행 시
+2. 파일 변경사항 자동 감지
+3. 변경사항이 있으면 자동 커밋
+4. GitLab에 자동 푸시
+5. Slack으로 푸시 결과 알림
+
+### ✅ 테스트
+
+```bash
+# GitLab 푸시 테스트 (대화형)
+cd your-project
+python3 ~/.claude-hooks/auto_push_gitlab.py
+```
+
+### 🔍 저장소 선택/생성 기능
+
+GitLab 저장소가 설정되지 않은 상태에서 자동 푸시를 시도하면:
+- 대화형 터미널: 자동으로 설정 마법사 실행
+- 백그라운드 실행: 안내 메시지 로그 출력
 
 ## ✅ 설치 테스트
 

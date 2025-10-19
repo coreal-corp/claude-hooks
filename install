@@ -574,7 +574,7 @@ fi
 # Step 3: Copy hook files
 print_msg step "Step 3: Copying hook files..."
 
-HOOK_FILES=("SessionStart" "SessionEnd" "Stop" "Notification" "analyze_transcript.py" "auto_update.py" "update")
+HOOK_FILES=("SessionStart" "SessionEnd" "Stop" "Notification" "analyze_transcript.py" "auto_update.py" "auto_push_gitlab.py" "setup_gitlab.py" "update")
 
 for file in "${HOOK_FILES[@]}"; do
     if [ -f "$SCRIPT_DIR/$file" ]; then
@@ -610,6 +610,23 @@ SLACK_USER_NAME=your_name
 # Auto-update settings
 AUTO_UPDATE_ENABLED=true
 UPDATE_CHECK_INTERVAL=86400
+
+# GitLab Auto-Push Settings
+# Enable auto-push to GitLab when file changes are detected
+GITLAB_AUTO_PUSH_ENABLED=false
+
+# GitLab repository URL (e.g., https://gitlab.com/your-username/your-repo.git)
+GITLAB_REPO_URL=
+
+# GitLab Access Token (optional - for private repos)
+# Create at: GitLab > Settings > Access Tokens
+GITLAB_ACCESS_TOKEN=
+
+# GitLab remote name (default: gitlab)
+GITLAB_REMOTE_NAME=gitlab
+
+# Custom commit message (optional - auto-generated if not set)
+GITLAB_AUTO_COMMIT_MESSAGE=
 EOF
     print_msg success "Environment template created: $ENV_FILE"
     print_msg warning "Edit $ENV_FILE to set your Slack token!"

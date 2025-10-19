@@ -96,6 +96,7 @@ def analyze_transcript(transcript_path, analyzer_script):
 def parse_analysis(analysis_text):
     """Parse analysis output into structured data"""
     data = {
+        'command_summary': '',
         'todos': [],
         'thinking': [],
         'plan': []
@@ -106,7 +107,11 @@ def parse_analysis(analysis_text):
 
     for line in lines:
         line = line.strip()
-        if line == 'TODOS_START':
+        if line == 'COMMAND_SUMMARY_START':
+            section = 'command_summary'
+        elif line == 'COMMAND_SUMMARY_END':
+            section = None
+        elif line == 'TODOS_START':
             section = 'todos'
         elif line == 'TODOS_END':
             section = None
@@ -118,6 +123,8 @@ def parse_analysis(analysis_text):
             section = 'plan'
         elif line == 'PLAN_END':
             section = None
+        elif section == 'command_summary' and line:
+            data['command_summary'] = line
         elif section == 'todos' and line:
             data['todos'].append(line)
         elif section == 'thinking' and line:
@@ -128,19 +135,19 @@ def parse_analysis(analysis_text):
     return data
 
 
-def send_slack_message(token, channel, message):
+def send_slack_message(token, channel, message, title="✅ 작업 완료"):
     """Send completion message to Slack"""
     url = "https://slack.com/api/chat.postMessage"
 
     payload = {
         "channel": channel,
-        "text": "✅ 작업 완료",
+        "text": title,
         "blocks": [
             {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": "✅ 작업 완료",
+                    "text": title,
                     "emoji": True
                 }
             },
@@ -219,13 +226,19 @@ def main():
 
     # Analyze transcript
     analysis = {}
+    command_summary = ""
     if transcript_path and os.path.exists(transcript_path):
         script_dir = Path(__file__).parent
         analyzer_script = script_dir / 'analyze_transcript.py'
         analysis = analyze_transcript(transcript_path, analyzer_script)
+        command_summary = analysis.get('command_summary', '')
 
-    # Build message
+    # Build message with command summary as header
     message_parts = []
+
+    # Add command summary as first line if available
+    if command_summary:
+        message_parts.append(f"*작업:* {command_summary}\n")
 
     # Plan (if exists)
     if analysis.get('plan'):
@@ -247,15 +260,39 @@ def main():
 
     full_message = '\n'.join(message_parts) if message_parts else f"작업이 완료되었습니다.\n\n📂 *프로젝트:* `{work_dir}`"
 
+    # Create title with command summary
+    slack_title = f"✅ 작업 완료: {command_summary}" if command_summary else "✅ 작업 완료"
+
     log_debug("Sending to Slack")
 
     # Send to Slack
     if slack_token:
-        success = send_slack_message(slack_token, slack_channel, full_message)
+        success = send_slack_message(slack_token, slack_channel, full_message, slack_title)
         if success:
             log_debug("Slack message sent successfully")
         else:
             log_debug("Slack message failed")
+
+    # Auto-push to GitLab if enabled and changes detected
+    try:
+        script_dir = Path(__file__).parent
+        gitlab_pusher = script_dir / 'auto_push_gitlab.py'
+        if gitlab_pusher.exists():
+            result = subprocess.run(
+                [sys.executable, str(gitlab_pusher)],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                # Send GitLab push notification to Slack
+                if slack_token:
+                    push_message = f"🔄 *GitLab 동기화 완료*\n\n{result.stdout.strip()}\n\n📂 *프로젝트:* `{work_dir}`"
+                    send_slack_message(slack_token, slack_channel, push_message)
+                    log_debug(f"GitLab push completed: {result.stdout.strip()}")
+    except Exception as e:
+        log_debug(f"GitLab push error: {str(e)}")
+        pass  # Don't fail the hook if GitLab push fails
 
     # Schedule lock file cleanup
     if transcript_path:

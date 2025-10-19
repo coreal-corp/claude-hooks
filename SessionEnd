@@ -52,6 +52,7 @@ def analyze_transcript(transcript_path, analyzer_script):
 def parse_analysis(analysis_text):
     """Parse analysis output into structured data"""
     data = {
+        'command_summary': '',
         'todos': [],
         'thinking': [],
         'plan': []
@@ -62,7 +63,11 @@ def parse_analysis(analysis_text):
 
     for line in lines:
         line = line.strip()
-        if line == 'TODOS_START':
+        if line == 'COMMAND_SUMMARY_START':
+            section = 'command_summary'
+        elif line == 'COMMAND_SUMMARY_END':
+            section = None
+        elif line == 'TODOS_START':
             section = 'todos'
         elif line == 'TODOS_END':
             section = None
@@ -74,6 +79,8 @@ def parse_analysis(analysis_text):
             section = 'plan'
         elif line == 'PLAN_END':
             section = None
+        elif section == 'command_summary' and line:
+            data['command_summary'] = line
         elif section == 'todos' and line:
             data['todos'].append(line)
         elif section == 'thinking' and line:
@@ -198,6 +205,9 @@ def main():
     slack_channel = env_vars.get('SLACK_CHANNEL_ID', 'C09J29WDSHK')
     slack_channel = slack_channel.lstrip('#')
 
+    # Get working directory
+    work_dir = os.getcwd()
+
     # Read input
     try:
         input_data = json.load(sys.stdin)
@@ -206,18 +216,20 @@ def main():
 
     transcript_path = input_data.get('transcript_path', '')
 
-    # Get task title
+    # Get task title from session file (원본 명령)
     task_title_file = temp_dir / f'.claude-session-task-{ppid}'
+    original_command = '대화형 모드'
     if task_title_file.exists():
         with open(task_title_file, 'r', encoding='utf-8') as f:
-            task_title = f.read().strip()
-    else:
-        task_title = '대화형 모드'
+            original_command = f.read().strip()
 
     # Analyze transcript
     script_dir = Path(__file__).parent
     analyzer_script = script_dir / 'analyze_transcript.py'
     analysis = analyze_transcript(transcript_path, analyzer_script)
+
+    # Use command summary as task title (요약된 명령)
+    task_title = analysis.get('command_summary', '') or original_command
 
     # Build message
     message_parts = [f"⏱️ *소요 시간:* {minutes}분 {seconds}초"]
@@ -250,6 +262,25 @@ def main():
     # Send to Slack
     if slack_token and thread_ts:
         send_slack_message(slack_token, slack_channel, thread_ts, task_title, full_message)
+
+    # Auto-push to GitLab if enabled and changes detected
+    try:
+        script_dir = Path(__file__).parent
+        gitlab_pusher = script_dir / 'auto_push_gitlab.py'
+        if gitlab_pusher.exists():
+            result = subprocess.run(
+                [sys.executable, str(gitlab_pusher)],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if result.returncode == 0:
+                # Send GitLab push notification to Slack
+                if slack_token and thread_ts and result.stdout.strip():
+                    push_message = f"🔄 *GitLab 동기화:* {result.stdout.strip()}"
+                    send_slack_message(slack_token, slack_channel, thread_ts, "GitLab Push", push_message)
+    except Exception as e:
+        pass  # Don't fail the hook if GitLab push fails
 
     # Cleanup session files
     try:
