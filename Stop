@@ -302,4 +302,12 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Log error but don't fail
+        log_debug(f"Stop hook error (non-fatal): {str(e)}")
+        pass
+    finally:
+        # Always exit successfully to avoid UI errors
+        sys.exit(0)

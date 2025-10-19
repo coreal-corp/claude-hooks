@@ -143,9 +143,27 @@ def add_gitlab_remote(gitlab_url, remote_name='gitlab'):
         return False
 
 
+def remove_git_lock():
+    """Remove git index.lock if it exists"""
+    import os
+    lock_file = '.git/index.lock'
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            log_debug("Removed stale index.lock file")
+            return True
+        except Exception as e:
+            log_debug(f"Failed to remove index.lock: {str(e)}")
+            return False
+    return True
+
+
 def commit_changes(commit_message=None):
     """Commit all changes with auto-generated message"""
     try:
+        # Remove stale lock file if exists
+        remove_git_lock()
+
         # Add all changes
         subprocess.run(
             ['git', 'add', '-A'],

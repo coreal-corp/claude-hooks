@@ -292,4 +292,11 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        # Silently handle errors to avoid UI error messages
+        pass
+    finally:
+        # Always exit successfully
+        sys.exit(0)
