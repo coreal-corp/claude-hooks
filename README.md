@@ -278,7 +278,48 @@ cp .ultrathink.env.template ~/.ultrathink.env
 nano ~/.ultrathink.env
 ```
 
-### 팀 배포
+### 🌐 GitLab에서 설치 (팀원용)
+
+**팀원이 GitLab 저장소에서 직접 설치:**
+
+```bash
+# 1. GitLab에서 클론
+git clone https://gitlab.com/your-org/claude-hooks.git
+cd claude-hooks
+
+# 2. 전역 설치 (모든 프로젝트에서 작동)
+./install
+
+# 3. Slack 토큰 설정
+nano ~/.ultrathink.env
+# SLACK_BOT_TOKEN과 SLACK_CHANNEL_ID 설정
+
+# 4. 설치 테스트
+echo '{"initial_user_message":"테스트"}' | ~/.claude-hooks/SessionStart
+```
+
+**Windows 팀원:**
+```cmd
+REM 1. GitLab에서 클론
+git clone https://gitlab.com/your-org/claude-hooks.git
+cd claude-hooks
+
+REM 2. 전역 설치
+install
+
+REM 3. Slack 토큰 설정
+notepad %USERPROFILE%\.ultrathink.env
+
+REM 4. 설치 테스트
+echo {"initial_user_message":"테스트"} | python %USERPROFILE%\.claude-hooks\SessionStart
+```
+
+**주의:**
+- GitLab 저장소 URL을 실제 주소로 변경하세요
+- install 스크립트가 자동으로 `~/.claude-hooks/`에 전역 설치
+- 설치 후 클론한 디렉토리는 삭제 가능 (hooks는 `~/.claude-hooks/`에 복사됨)
+
+### 팀 배포 (압축 파일)
 
 ```bash
 # 압축 파일 생성
