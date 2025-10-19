@@ -87,10 +87,15 @@ def send_slack_message(token, channel, task_title, user_name, hostname, work_dir
                     {
                         "type": "mrkdwn",
                         "text": f"*시작:*\n{timestamp}"
-                    },
+                    }
+                ]
+            },
+            {
+                "type": "context",
+                "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": f"*프로젝트:*\n`{work_dir}`"
+                        "text": f":open_file_folder: 프로젝트: `{work_dir}`"
                     }
                 ]
             }
