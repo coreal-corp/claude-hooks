@@ -255,7 +255,7 @@ def main():
         message_parts.append(f"\n📝 *Git 변경:* {git_changes}")
 
     # Project path at bottom
-    message_parts.append(f"\n📂 *프로젝트:* `{work_dir}`")
+    message_parts.append(f"\n:open_file_folder: 프로젝트: `{work_dir}`")
 
     full_message = '\n'.join(message_parts)
 

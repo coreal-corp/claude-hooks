@@ -256,9 +256,9 @@ def main():
         message_parts.append(f"\n💭 *검토 사항:*\n{thinking_text}")
 
     # Project path at bottom
-    message_parts.append(f"\n📂 *프로젝트:* `{work_dir}`")
+    message_parts.append(f"\n:open_file_folder: 프로젝트: `{work_dir}`")
 
-    full_message = '\n'.join(message_parts) if message_parts else f"작업이 완료되었습니다.\n\n📂 *프로젝트:* `{work_dir}`"
+    full_message = '\n'.join(message_parts) if message_parts else f"작업이 완료되었습니다.\n\n:open_file_folder: 프로젝트: `{work_dir}`"
 
     # Create title with command summary
     slack_title = f"✅ 작업 완료: {command_summary}" if command_summary else "✅ 작업 완료"
@@ -287,7 +287,7 @@ def main():
             if result.returncode == 0 and result.stdout.strip():
                 # Send GitLab push notification to Slack
                 if slack_token:
-                    push_message = f"🔄 *GitLab 동기화 완료*\n\n{result.stdout.strip()}\n\n📂 *프로젝트:* `{work_dir}`"
+                    push_message = f"🔄 *GitLab 동기화 완료*\n\n{result.stdout.strip()}\n\n:open_file_folder: 프로젝트: `{work_dir}`"
                     send_slack_message(slack_token, slack_channel, push_message)
                     log_debug(f"GitLab push completed: {result.stdout.strip()}")
     except Exception as e:
