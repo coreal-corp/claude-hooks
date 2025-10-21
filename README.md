@@ -222,6 +222,36 @@ winget install Python.Python.3
    cat ~/.ultrathink.env
    ```
 
+### ⚠️ Claude Code 자동 업데이트 에러
+
+**에러 메시지:**
+```
+✗ Auto-update failed · Try claude doctor or cd ~/.claude/local && npm update
+ERROR Raw mode is not supported on the current process.stdin
+```
+
+**원인:**
+`claude doctor`는 대화형 터미널(TTY)을 요구하지만, Claude Code 내부 프로세스에서는 stdin이 없어서 실패합니다.
+
+**해결 방법:**
+```bash
+# npm update를 직접 실행 (claude doctor 대신)
+cd ~/.claude/local && npm update
+```
+
+**자동화 (권장):**
+이 에러는 hooks의 자동 업데이트 기능으로 자동 해결됩니다:
+- `auto_update.py`가 24시간마다 자동으로 Claude Code 업데이트
+- `claude doctor` 대신 `npm update`를 직접 실행하여 우회
+- 업데이트 결과를 Slack으로 알림
+
+**수동 수정 스크립트:**
+```bash
+~/.claude-hooks/fix_auto_update.sh
+```
+
+이 에러는 더 이상 보지 않게 됩니다!
+
 ### Slack 알림이 오지 않음
 
 1. Slack Bot Token 확인
